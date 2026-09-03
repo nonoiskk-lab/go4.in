@@ -1,6 +1,13 @@
 import { FFmpeg } from './vendor/ffmpeg/index.js';
 import { fetchFile } from './vendor/util/index.js';
 
+window.addEventListener('error', (e) => {
+  console.error('[watermark-remover] uncaught error', e.error || e.message);
+});
+window.addEventListener('unhandledrejection', (e) => {
+  console.error('[watermark-remover] unhandled rejection', e.reason);
+});
+
 const fileInput = document.getElementById('fileInput');
 const uploadError = document.getElementById('uploadError');
 const engineStatus = document.getElementById('engineStatus');
@@ -97,34 +104,59 @@ function syncCanvasSize() {
   redraw();
 }
 
-fileInput.addEventListener('change', async () => {
+fileInput.addEventListener('change', () => {
   uploadError.textContent = '';
   const file = fileInput.files[0];
   if (!file) return;
 
+  uploadError.textContent = `Reading "${file.name}"…`;
+
+  let settled = false;
   const objectUrl = URL.createObjectURL(file);
   const probe = document.createElement('video');
   probe.preload = 'metadata';
   probe.muted = true;
   probe.playsInline = true;
-  probe.src = objectUrl;
+
+  const fail = (msg) => {
+    if (settled) return;
+    settled = true;
+    clearTimeout(timeoutId);
+    console.error('[watermark-remover]', msg, file.type, file.size);
+    uploadError.textContent = msg;
+    URL.revokeObjectURL(objectUrl);
+    fileInput.value = '';
+  };
+
+  const timeoutId = setTimeout(() => {
+    fail(
+      "This video didn't load in 15s. Your browser may not support this file's " +
+      `codec/container (type: "${file.type || 'unknown'}"). Try converting it to MP4 (H.264) first.`
+    );
+  }, 15000);
 
   probe.onerror = () => {
-    uploadError.textContent = "Could not read that video file.";
-    URL.revokeObjectURL(objectUrl);
+    const code = probe.error && probe.error.code;
+    fail(
+      `Could not read that video file (browser error code ${code || 'unknown'}). ` +
+      "It may be an unsupported format/codec — try MP4 (H.264) or WebM."
+    );
   };
 
   probe.onloadedmetadata = () => {
     const w = probe.videoWidth, h = probe.videoHeight;
     if (!w || !h) {
-      uploadError.textContent = "Could not read that video's resolution.";
-      URL.revokeObjectURL(objectUrl);
+      fail("Could not read that video's resolution.");
       return;
     }
-    probe.currentTime = Math.min(1, (probe.duration || 2) / 2);
+    probe.currentTime = Math.min(1, (probe.duration || 2) / 2) || 0;
   };
 
   probe.onseeked = () => {
+    if (settled) return;
+    settled = true;
+    clearTimeout(timeoutId);
+
     frameCanvas.width = probe.videoWidth;
     frameCanvas.height = probe.videoHeight;
     frameCtx.drawImage(probe, 0, 0);
@@ -137,9 +169,12 @@ fileInput.addEventListener('change', async () => {
     };
     boxes = [];
     URL.revokeObjectURL(objectUrl);
+    uploadError.textContent = '';
     syncCanvasSize();
     showStep(stepSelect);
   };
+
+  probe.src = objectUrl;
 });
 
 window.addEventListener('resize', () => {

@@ -60,6 +60,20 @@
     <p>100% client-side: your video never leaves this device. Powered by FFmpeg compiled to WebAssembly.</p>
   </footer>
 
-  <script type="module" src="app.js"></script>
+  <script>
+    // Load the app as a dynamic import (instead of <script type="module" src>)
+    // so a failure to fetch app.js or any of its imports (e.g. the ffmpeg.wasm
+    // vendor bundle missing from a deploy) shows up as a visible error instead
+    // of silently leaving the page non-interactive.
+    import('./app.js').catch((err) => {
+      console.error('Failed to load app.js', err);
+      var el = document.getElementById('uploadError');
+      if (el) {
+        el.textContent =
+          'Could not load the app (' + (err && err.message ? err.message : err) +
+          '). Try a hard refresh (Ctrl/Cmd+Shift+R). If it keeps happening, the deployment may be missing files.';
+      }
+    });
+  </script>
 </body>
 </html>
