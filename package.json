@@ -1,0 +1,16 @@
+{
+  "name": "video-watermark-remover",
+  "version": "1.0.0",
+  "description": "Web app to remove a watermark/logo from a video by selecting the region on a preview frame.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "multer": "^2.0.0"
+  }
+}

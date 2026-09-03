@@ -1,0 +1,140 @@
+* { box-sizing: border-box; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: #0f1115;
+  color: #e8e8ea;
+  margin: 0;
+  padding: 0 16px 48px;
+}
+
+header {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 32px 0 8px;
+  text-align: center;
+}
+
+h1 { margin: 0 0 4px; font-size: 1.8rem; }
+.subtitle { color: #9a9aa5; margin: 0; }
+
+main {
+  max-width: 720px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.card {
+  background: #171923;
+  border: 1px solid #262936;
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.card.hidden { display: none; }
+
+h2 { margin-top: 0; font-size: 1.1rem; }
+
+.hint { color: #9a9aa5; font-size: 0.9rem; }
+
+.error { color: #ff6b6b; font-size: 0.9rem; min-height: 1.2em; }
+
+input[type="file"] {
+  display: block;
+  margin: 12px 0;
+  color: inherit;
+}
+
+.canvas-wrap {
+  position: relative;
+  max-width: 100%;
+  display: inline-block;
+  line-height: 0;
+  margin: 12px 0;
+}
+
+.canvas-wrap img {
+  max-width: 100%;
+  display: block;
+  border-radius: 8px;
+}
+
+.canvas-wrap canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+  border-radius: 8px;
+}
+
+.controls-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-top: 12px;
+}
+
+.controls-row label {
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+button, .button {
+  background: #262936;
+  color: #e8e8ea;
+  border: 1px solid #363a4a;
+  border-radius: 8px;
+  padding: 10px 16px;
+  font-size: 0.95rem;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-block;
+}
+
+button:hover, .button:hover { background: #2f3342; }
+
+button.primary, .button.primary {
+  background: #5b6bff;
+  border-color: #5b6bff;
+  color: #fff;
+  font-weight: 600;
+}
+
+button.primary:hover, .button.primary:hover { background: #4a58e0; }
+
+.progress-bar {
+  background: #262936;
+  border-radius: 999px;
+  height: 12px;
+  overflow: hidden;
+}
+
+#progressFill {
+  background: #5b6bff;
+  height: 100%;
+  width: 0%;
+  transition: width 0.3s ease;
+}
+
+#progressLabel { margin: 8px 0 0; color: #9a9aa5; font-size: 0.9rem; }
+
+#resultVideo {
+  width: 100%;
+  border-radius: 8px;
+  margin: 12px 0;
+}
+
+footer {
+  max-width: 720px;
+  margin: 32px auto 0;
+  text-align: center;
+  color: #6b6e7a;
+  font-size: 0.85rem;
+}

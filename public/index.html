@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Video Watermark Remover</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <h1>Video Watermark Remover</h1>
+    <p class="subtitle">Upload a video, draw a box over the watermark, and download the cleaned-up result.</p>
+  </header>
+
+  <main>
+    <section id="step-upload" class="card">
+      <h2>1. Upload a video</h2>
+      <input type="file" id="fileInput" accept="video/*" />
+      <p class="hint">MP4, MOV, WebM, etc. Up to 500MB. Only use this on videos you own or have permission to edit.</p>
+      <p id="uploadError" class="error"></p>
+    </section>
+
+    <section id="step-select" class="card hidden">
+      <h2>2. Mark the watermark</h2>
+      <p class="hint">Drag a box over the watermark on the frame below. You can draw multiple boxes if the watermark repeats in different spots.</p>
+      <div class="canvas-wrap">
+        <img id="previewImg" alt="video preview frame" />
+        <canvas id="overlay"></canvas>
+      </div>
+      <div class="controls-row">
+        <label><input type="radio" name="mode" value="delogo" checked /> Auto-remove (best for logos/static watermarks)</label>
+        <label><input type="radio" name="mode" value="blur" /> Blur watermark instead</label>
+      </div>
+      <div class="controls-row">
+        <button id="undoBtn" type="button">Undo last box</button>
+        <button id="clearBtn" type="button">Clear boxes</button>
+        <button id="processBtn" type="button" class="primary">Remove watermark</button>
+      </div>
+      <p id="processError" class="error"></p>
+    </section>
+
+    <section id="step-progress" class="card hidden">
+      <h2>3. Processing</h2>
+      <div class="progress-bar"><div id="progressFill"></div></div>
+      <p id="progressLabel">0%</p>
+    </section>
+
+    <section id="step-done" class="card hidden">
+      <h2>4. Done</h2>
+      <video id="resultVideo" controls></video>
+      <div class="controls-row">
+        <a id="downloadLink" class="primary button" download>Download video</a>
+        <button id="restartBtn" type="button">Process another video</button>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p>Processing happens on the server via FFmpeg. Files are deleted automatically after an hour.</p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
