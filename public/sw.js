@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = 'v2';
 const SHELL_CACHE = `shell-${CACHE_VERSION}`;
 const VENDOR_CACHE = `vendor-${CACHE_VERSION}`;
 
@@ -8,8 +8,7 @@ const SHELL_ASSETS = [
   './style.css',
   './app.js',
   './manifest.json',
-  './icons/icon-192.png',
-  './icons/icon-512.png',
+  './icon.svg',
 ];
 
 self.addEventListener('install', (event) => {
