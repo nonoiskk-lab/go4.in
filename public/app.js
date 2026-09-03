@@ -9,13 +9,16 @@ window.addEventListener('unhandledrejection', (e) => {
 });
 
 const fileInput = document.getElementById('fileInput');
+const dropZone = document.getElementById('dropZone');
 const uploadError = document.getElementById('uploadError');
 const engineStatus = document.getElementById('engineStatus');
+const installBtn = document.getElementById('installBtn');
 
 const stepUpload = document.getElementById('step-upload');
 const stepSelect = document.getElementById('step-select');
 const stepProgress = document.getElementById('step-progress');
 const stepDone = document.getElementById('step-done');
+const stepIndicators = document.querySelectorAll('.steps li');
 
 const frameCanvas = document.getElementById('frameCanvas');
 const frameCtx = frameCanvas.getContext('2d');
@@ -68,10 +71,14 @@ function getFfmpeg() {
 // time the user has picked a file and drawn their boxes.
 getFfmpeg().catch(() => {});
 
+const STEP_KEYS = { [stepUpload.id]: 'upload', [stepSelect.id]: 'select', [stepProgress.id]: 'progress', [stepDone.id]: 'done' };
+
 function showStep(step) {
   for (const el of [stepUpload, stepSelect, stepProgress, stepDone]) {
     el.classList.toggle('hidden', el !== step);
   }
+  const key = STEP_KEYS[step.id];
+  stepIndicators.forEach((li) => li.classList.toggle('active', li.dataset.step === key));
 }
 
 function scale() {
@@ -105,9 +112,32 @@ function syncCanvasSize() {
 }
 
 fileInput.addEventListener('change', () => {
-  uploadError.textContent = '';
   const file = fileInput.files[0];
-  if (!file) return;
+  if (file) handleFile(file);
+});
+
+['dragenter', 'dragover'].forEach((evt) => {
+  dropZone.addEventListener(evt, (e) => {
+    e.preventDefault();
+    dropZone.classList.add('drag-over');
+  });
+});
+['dragleave', 'dragend'].forEach((evt) => {
+  dropZone.addEventListener(evt, () => dropZone.classList.remove('drag-over'));
+});
+dropZone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+  if (file) handleFile(file);
+});
+
+function handleFile(file) {
+  uploadError.textContent = '';
+  if (!file.type.startsWith('video/')) {
+    uploadError.textContent = `"${file.name}" doesn't look like a video file.`;
+    return;
+  }
 
   uploadError.textContent = `Reading "${file.name}"…`;
 
@@ -175,7 +205,7 @@ fileInput.addEventListener('change', () => {
   };
 
   probe.src = objectUrl;
-});
+}
 
 window.addEventListener('resize', () => {
   if (!stepSelect.classList.contains('hidden')) syncCanvasSize();
@@ -323,6 +353,24 @@ processBtn.addEventListener('click', async () => {
   } finally {
     processBtn.disabled = false;
   }
+});
+
+let deferredInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  installBtn.classList.remove('hidden');
+});
+installBtn.addEventListener('click', async () => {
+  if (!deferredInstallPrompt) return;
+  installBtn.disabled = true;
+  deferredInstallPrompt.prompt();
+  await deferredInstallPrompt.userChoice.catch(() => {});
+  deferredInstallPrompt = null;
+  installBtn.classList.add('hidden');
+});
+window.addEventListener('appinstalled', () => {
+  installBtn.classList.add('hidden');
 });
 
 restartBtn.addEventListener('click', () => {
