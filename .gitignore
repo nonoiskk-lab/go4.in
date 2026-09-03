@@ -1,6 +1,3 @@
 node_modules/
-uploads/*
-!uploads/.gitkeep
-output/*
-!output/.gitkeep
+public/vendor/
 *.log

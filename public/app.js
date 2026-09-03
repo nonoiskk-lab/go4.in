@@ -1,220 +1,300 @@
-(() => {
-  const fileInput = document.getElementById('fileInput');
-  const uploadError = document.getElementById('uploadError');
+import { FFmpeg } from './vendor/ffmpeg/index.js';
+import { fetchFile } from './vendor/util/index.js';
 
-  const stepUpload = document.getElementById('step-upload');
-  const stepSelect = document.getElementById('step-select');
-  const stepProgress = document.getElementById('step-progress');
-  const stepDone = document.getElementById('step-done');
+const fileInput = document.getElementById('fileInput');
+const uploadError = document.getElementById('uploadError');
+const engineStatus = document.getElementById('engineStatus');
 
-  const previewImg = document.getElementById('previewImg');
-  const overlay = document.getElementById('overlay');
-  const ctx = overlay.getContext('2d');
+const stepUpload = document.getElementById('step-upload');
+const stepSelect = document.getElementById('step-select');
+const stepProgress = document.getElementById('step-progress');
+const stepDone = document.getElementById('step-done');
 
-  const undoBtn = document.getElementById('undoBtn');
-  const clearBtn = document.getElementById('clearBtn');
-  const processBtn = document.getElementById('processBtn');
-  const processError = document.getElementById('processError');
+const frameCanvas = document.getElementById('frameCanvas');
+const frameCtx = frameCanvas.getContext('2d');
+const overlay = document.getElementById('overlay');
+const ctx = overlay.getContext('2d');
 
-  const progressFill = document.getElementById('progressFill');
-  const progressLabel = document.getElementById('progressLabel');
+const undoBtn = document.getElementById('undoBtn');
+const clearBtn = document.getElementById('clearBtn');
+const processBtn = document.getElementById('processBtn');
+const processError = document.getElementById('processError');
 
-  const resultVideo = document.getElementById('resultVideo');
-  const downloadLink = document.getElementById('downloadLink');
-  const restartBtn = document.getElementById('restartBtn');
+const progressFill = document.getElementById('progressFill');
+const progressLabel = document.getElementById('progressLabel');
 
-  let job = null; // { id, width, height }
-  let boxes = []; // in natural video pixel coordinates {x,y,w,h}
-  let drawing = null; // in-progress box, in canvas display coordinates
+const resultVideo = document.getElementById('resultVideo');
+const downloadLink = document.getElementById('downloadLink');
+const restartBtn = document.getElementById('restartBtn');
 
-  function showStep(step) {
-    for (const el of [stepUpload, stepSelect, stepProgress, stepDone]) {
-      el.classList.toggle('hidden', el !== step);
-    }
+let video = null; // { width, height, duration, file }
+let boxes = []; // in natural video pixel coordinates {x,y,w,h}
+let drawing = null;
+let start = null;
+
+let ffmpeg = null;
+let ffmpegReady = null;
+
+function getFfmpeg() {
+  if (ffmpegReady) return ffmpegReady;
+  ffmpeg = new FFmpeg();
+  ffmpeg.on('log', ({ message }) => console.debug('[ffmpeg]', message));
+  engineStatus.textContent = 'Loading the video engine (first time only, ~30MB)…';
+  ffmpegReady = ffmpeg
+    .load({
+      coreURL: new URL('./vendor/core/ffmpeg-core.js', document.baseURI).href,
+      wasmURL: new URL('./vendor/core/ffmpeg-core.wasm', document.baseURI).href,
+    })
+    .then(() => {
+      engineStatus.textContent = 'Video engine ready.';
+    })
+    .catch((e) => {
+      engineStatus.textContent = '';
+      uploadError.textContent = 'Could not load the video engine: ' + e.message;
+      ffmpegReady = null;
+      throw e;
+    });
+  return ffmpegReady;
+}
+
+// Start loading the engine as soon as the page opens, so it's ready by the
+// time the user has picked a file and drawn their boxes.
+getFfmpeg().catch(() => {});
+
+function showStep(step) {
+  for (const el of [stepUpload, stepSelect, stepProgress, stepDone]) {
+    el.classList.toggle('hidden', el !== step);
   }
+}
 
-  function scale() {
-    return {
-      sx: job.width / overlay.clientWidth,
-      sy: job.height / overlay.clientHeight,
-    };
+function scale() {
+  return {
+    sx: video.width / overlay.clientWidth,
+    sy: video.height / overlay.clientHeight,
+  };
+}
+
+function redraw() {
+  ctx.clearRect(0, 0, overlay.width, overlay.height);
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = '#5b6bff';
+  ctx.fillStyle = 'rgba(91,107,255,0.2)';
+
+  const { sx, sy } = scale();
+  for (const b of boxes) {
+    const x = b.x / sx, y = b.y / sy, w = b.w / sx, h = b.h / sy;
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeRect(x, y, w, h);
   }
-
-  function redraw() {
-    ctx.clearRect(0, 0, overlay.width, overlay.height);
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = '#5b6bff';
-    ctx.fillStyle = 'rgba(91,107,255,0.2)';
-
-    const { sx, sy } = scale();
-    for (const b of boxes) {
-      const x = b.x / sx, y = b.y / sy, w = b.w / sx, h = b.h / sy;
-      ctx.fillRect(x, y, w, h);
-      ctx.strokeRect(x, y, w, h);
-    }
-    if (drawing) {
-      ctx.strokeRect(drawing.x, drawing.y, drawing.w, drawing.h);
-    }
+  if (drawing) {
+    ctx.strokeRect(drawing.x, drawing.y, drawing.w, drawing.h);
   }
+}
 
-  function syncCanvasSize() {
-    overlay.width = overlay.clientWidth;
-    overlay.height = overlay.clientHeight;
-    redraw();
-  }
+function syncCanvasSize() {
+  overlay.width = overlay.clientWidth;
+  overlay.height = overlay.clientHeight;
+  redraw();
+}
 
-  fileInput.addEventListener('change', async () => {
-    uploadError.textContent = '';
-    const file = fileInput.files[0];
-    if (!file) return;
+fileInput.addEventListener('change', async () => {
+  uploadError.textContent = '';
+  const file = fileInput.files[0];
+  if (!file) return;
 
-    const formData = new FormData();
-    formData.append('video', file);
+  const objectUrl = URL.createObjectURL(file);
+  const probe = document.createElement('video');
+  probe.preload = 'metadata';
+  probe.muted = true;
+  probe.playsInline = true;
+  probe.src = objectUrl;
 
-    try {
-      fileInput.disabled = true;
-      const res = await fetch('/api/upload', { method: 'POST', body: formData });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Upload failed');
+  probe.onerror = () => {
+    uploadError.textContent = "Could not read that video file.";
+    URL.revokeObjectURL(objectUrl);
+  };
 
-      job = { id: data.id, width: data.width, height: data.height, duration: data.duration };
-      boxes = [];
-      previewImg.src = `/api/preview/${job.id}?t=${Date.now()}`;
-      previewImg.onload = () => {
-        syncCanvasSize();
-        showStep(stepSelect);
-      };
-    } catch (e) {
-      uploadError.textContent = e.message;
-    } finally {
-      fileInput.disabled = false;
-    }
-  });
-
-  window.addEventListener('resize', () => {
-    if (!stepSelect.classList.contains('hidden')) syncCanvasSize();
-  });
-
-  function pointerPos(e) {
-    const rect = overlay.getBoundingClientRect();
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-    return {
-      x: Math.min(Math.max(clientX - rect.left, 0), overlay.clientWidth),
-      y: Math.min(Math.max(clientY - rect.top, 0), overlay.clientHeight),
-    };
-  }
-
-  let start = null;
-
-  function onDown(e) {
-    start = pointerPos(e);
-    drawing = { x: start.x, y: start.y, w: 0, h: 0 };
-  }
-
-  function onMove(e) {
-    if (!start) return;
-    const p = pointerPos(e);
-    drawing = {
-      x: Math.min(start.x, p.x),
-      y: Math.min(start.y, p.y),
-      w: Math.abs(p.x - start.x),
-      h: Math.abs(p.y - start.y),
-    };
-    redraw();
-  }
-
-  function onUp() {
-    if (drawing && drawing.w > 4 && drawing.h > 4) {
-      const { sx, sy } = scale();
-      boxes.push({
-        x: Math.round(drawing.x * sx),
-        y: Math.round(drawing.y * sy),
-        w: Math.round(drawing.w * sx),
-        h: Math.round(drawing.h * sy),
-      });
-    }
-    drawing = null;
-    start = null;
-    redraw();
-  }
-
-  overlay.addEventListener('mousedown', onDown);
-  overlay.addEventListener('mousemove', onMove);
-  window.addEventListener('mouseup', onUp);
-  overlay.addEventListener('touchstart', onDown, { passive: true });
-  overlay.addEventListener('touchmove', onMove, { passive: true });
-  overlay.addEventListener('touchend', onUp);
-
-  undoBtn.addEventListener('click', () => {
-    boxes.pop();
-    redraw();
-  });
-
-  clearBtn.addEventListener('click', () => {
-    boxes = [];
-    redraw();
-  });
-
-  processBtn.addEventListener('click', async () => {
-    processError.textContent = '';
-    if (boxes.length === 0) {
-      processError.textContent = 'Draw at least one box over the watermark first.';
+  probe.onloadedmetadata = () => {
+    const w = probe.videoWidth, h = probe.videoHeight;
+    if (!w || !h) {
+      uploadError.textContent = "Could not read that video's resolution.";
+      URL.revokeObjectURL(objectUrl);
       return;
     }
-    const mode = document.querySelector('input[name="mode"]:checked').value;
+    probe.currentTime = Math.min(1, (probe.duration || 2) / 2);
+  };
 
-    try {
-      processBtn.disabled = true;
-      const res = await fetch('/api/process', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: job.id, regions: boxes, mode }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Could not start processing');
+  probe.onseeked = () => {
+    frameCanvas.width = probe.videoWidth;
+    frameCanvas.height = probe.videoHeight;
+    frameCtx.drawImage(probe, 0, 0);
 
-      showStep(stepProgress);
-      pollStatus();
-    } catch (e) {
-      processError.textContent = e.message;
-    } finally {
-      processBtn.disabled = false;
-    }
-  });
+    video = {
+      width: probe.videoWidth,
+      height: probe.videoHeight,
+      duration: probe.duration,
+      file,
+    };
+    boxes = [];
+    URL.revokeObjectURL(objectUrl);
+    syncCanvasSize();
+    showStep(stepSelect);
+  };
+});
 
-  async function pollStatus() {
-    try {
-      const res = await fetch(`/api/status/${job.id}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Status check failed');
+window.addEventListener('resize', () => {
+  if (!stepSelect.classList.contains('hidden')) syncCanvasSize();
+});
 
-      progressFill.style.width = `${data.progress}%`;
-      progressLabel.textContent = `${data.progress}%`;
+function pointerPos(e) {
+  const rect = overlay.getBoundingClientRect();
+  const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+  const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+  return {
+    x: Math.min(Math.max(clientX - rect.left, 0), overlay.clientWidth),
+    y: Math.min(Math.max(clientY - rect.top, 0), overlay.clientHeight),
+  };
+}
 
-      if (data.status === 'done') {
-        resultVideo.src = `/api/download/${job.id}`;
-        downloadLink.href = `/api/download/${job.id}`;
-        showStep(stepDone);
-        return;
-      }
-      if (data.status === 'error') {
-        showStep(stepSelect);
-        processError.textContent = data.error || 'Processing failed';
-        return;
-      }
-      setTimeout(pollStatus, 1000);
-    } catch (e) {
-      showStep(stepSelect);
-      processError.textContent = e.message;
-    }
+function onDown(e) {
+  start = pointerPos(e);
+  drawing = { x: start.x, y: start.y, w: 0, h: 0 };
+}
+
+function onMove(e) {
+  if (!start) return;
+  const p = pointerPos(e);
+  drawing = {
+    x: Math.min(start.x, p.x),
+    y: Math.min(start.y, p.y),
+    w: Math.abs(p.x - start.x),
+    h: Math.abs(p.y - start.y),
+  };
+  redraw();
+}
+
+function onUp() {
+  if (drawing && drawing.w > 4 && drawing.h > 4) {
+    const { sx, sy } = scale();
+    boxes.push({
+      x: Math.round(drawing.x * sx),
+      y: Math.round(drawing.y * sy),
+      w: Math.round(drawing.w * sx),
+      h: Math.round(drawing.h * sy),
+    });
+  }
+  drawing = null;
+  start = null;
+  redraw();
+}
+
+overlay.addEventListener('mousedown', onDown);
+overlay.addEventListener('mousemove', onMove);
+window.addEventListener('mouseup', onUp);
+overlay.addEventListener('touchstart', onDown, { passive: true });
+overlay.addEventListener('touchmove', onMove, { passive: true });
+overlay.addEventListener('touchend', onUp);
+
+undoBtn.addEventListener('click', () => {
+  boxes.pop();
+  redraw();
+});
+
+clearBtn.addEventListener('click', () => {
+  boxes = [];
+  redraw();
+});
+
+function buildFilter(regions, mode) {
+  if (mode === 'blur') {
+    let last = '0:v';
+    const parts = [];
+    regions.forEach((r, i) => {
+      const bg = `bg${i}`, fg = `fg${i}`, blurred = `bl${i}`;
+      const merged = i === regions.length - 1 ? 'vout' : `m${i}`;
+      parts.push(`[${last}]split=2[${bg}][${fg}]`);
+      parts.push(`[${fg}]crop=${r.w}:${r.h}:${r.x}:${r.y},boxblur=18:6[${blurred}]`);
+      parts.push(`[${bg}][${blurred}]overlay=${r.x}:${r.y}[${merged}]`);
+      last = merged;
+    });
+    return { graph: parts.join(';'), outLabel: '[vout]' };
   }
 
-  restartBtn.addEventListener('click', () => {
-    job = null;
-    boxes = [];
-    fileInput.value = '';
-    resultVideo.src = '';
-    showStep(stepUpload);
-  });
-})();
+  const chain = regions
+    .map((r) => `delogo=x=${r.x}:y=${r.y}:w=${r.w}:h=${r.h}:show=0`)
+    .join(',');
+  return { graph: `[0:v]${chain}[vout]`, outLabel: '[vout]' };
+}
+
+processBtn.addEventListener('click', async () => {
+  processError.textContent = '';
+  if (boxes.length === 0) {
+    processError.textContent = 'Draw at least one box over the watermark first.';
+    return;
+  }
+  const mode = document.querySelector('input[name="mode"]:checked').value;
+
+  try {
+    processBtn.disabled = true;
+    showStep(stepProgress);
+    progressFill.style.width = '0%';
+    progressLabel.textContent = 'Loading video engine…';
+
+    const engine = await getFfmpeg();
+    void engine;
+
+    const ext = (video.file.name.match(/\.[a-z0-9]+$/i) || ['.mp4'])[0];
+    const inputName = `input${ext}`;
+    const outputName = 'output.mp4';
+
+    const onProgress = ({ progress }) => {
+      const pct = Math.max(0, Math.min(100, Math.round(progress * 100)));
+      progressFill.style.width = `${pct}%`;
+      progressLabel.textContent = `${pct}%`;
+    };
+    ffmpeg.on('progress', onProgress);
+
+    progressLabel.textContent = 'Reading file…';
+    await ffmpeg.writeFile(inputName, await fetchFile(video.file));
+
+    const filter = buildFilter(boxes, mode);
+    progressLabel.textContent = 'Processing…';
+    await ffmpeg.exec([
+      '-i', inputName,
+      '-filter_complex', filter.graph,
+      '-map', filter.outLabel,
+      '-map', '0:a?',
+      '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20',
+      '-c:a', 'copy',
+      outputName,
+    ]);
+
+    ffmpeg.off('progress', onProgress);
+
+    const data = await ffmpeg.readFile(outputName);
+    const blob = new Blob([data.buffer], { type: 'video/mp4' });
+    const url = URL.createObjectURL(blob);
+
+    resultVideo.src = url;
+    downloadLink.href = url;
+
+    await ffmpeg.deleteFile(inputName).catch(() => {});
+    await ffmpeg.deleteFile(outputName).catch(() => {});
+
+    showStep(stepDone);
+  } catch (e) {
+    showStep(stepSelect);
+    processError.textContent = 'Processing failed: ' + (e.message || e);
+  } finally {
+    processBtn.disabled = false;
+  }
+});
+
+restartBtn.addEventListener('click', () => {
+  if (resultVideo.src) URL.revokeObjectURL(resultVideo.src);
+  video = null;
+  boxes = [];
+  fileInput.value = '';
+  resultVideo.removeAttribute('src');
+  showStep(stepUpload);
+});

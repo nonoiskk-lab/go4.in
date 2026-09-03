@@ -49,19 +49,22 @@ input[type="file"] {
 
 .canvas-wrap {
   position: relative;
-  max-width: 100%;
-  display: inline-block;
+  width: 100%;
+  display: block;
   line-height: 0;
   margin: 12px 0;
 }
 
-.canvas-wrap img {
+.canvas-wrap #frameCanvas {
   max-width: 100%;
+  width: 100%;
+  height: auto;
   display: block;
   border-radius: 8px;
+  background: #000;
 }
 
-.canvas-wrap canvas {
+.canvas-wrap #overlay {
   position: absolute;
   top: 0;
   left: 0;

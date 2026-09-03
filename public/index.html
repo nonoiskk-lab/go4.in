@@ -9,22 +9,23 @@
 <body>
   <header>
     <h1>Video Watermark Remover</h1>
-    <p class="subtitle">Upload a video, draw a box over the watermark, and download the cleaned-up result.</p>
+    <p class="subtitle">Runs entirely in your browser (Android, Windows, iOS, Mac) — nothing to install, no upload to any server.</p>
   </header>
 
   <main>
     <section id="step-upload" class="card">
-      <h2>1. Upload a video</h2>
+      <h2>1. Choose a video</h2>
       <input type="file" id="fileInput" accept="video/*" />
-      <p class="hint">MP4, MOV, WebM, etc. Up to 500MB. Only use this on videos you own or have permission to edit.</p>
+      <p class="hint">Works best under ~200MB — everything is processed on your own device, so very large files can be slow or run out of memory on phones.</p>
+      <p id="engineStatus" class="hint"></p>
       <p id="uploadError" class="error"></p>
     </section>
 
     <section id="step-select" class="card hidden">
       <h2>2. Mark the watermark</h2>
-      <p class="hint">Drag a box over the watermark on the frame below. You can draw multiple boxes if the watermark repeats in different spots.</p>
+      <p class="hint">Drag a box over the watermark on the frame below. You can draw multiple boxes if it repeats in different spots.</p>
       <div class="canvas-wrap">
-        <img id="previewImg" alt="video preview frame" />
+        <canvas id="frameCanvas"></canvas>
         <canvas id="overlay"></canvas>
       </div>
       <div class="controls-row">
@@ -40,25 +41,25 @@
     </section>
 
     <section id="step-progress" class="card hidden">
-      <h2>3. Processing</h2>
+      <h2>3. Processing (on your device)</h2>
       <div class="progress-bar"><div id="progressFill"></div></div>
-      <p id="progressLabel">0%</p>
+      <p id="progressLabel">Starting…</p>
     </section>
 
     <section id="step-done" class="card hidden">
       <h2>4. Done</h2>
-      <video id="resultVideo" controls></video>
+      <video id="resultVideo" controls playsinline></video>
       <div class="controls-row">
-        <a id="downloadLink" class="primary button" download>Download video</a>
+        <a id="downloadLink" class="primary button" download="watermark-removed.mp4">Download video</a>
         <button id="restartBtn" type="button">Process another video</button>
       </div>
     </section>
   </main>
 
   <footer>
-    <p>Processing happens on the server via FFmpeg. Files are deleted automatically after an hour.</p>
+    <p>100% client-side: your video never leaves this device. Powered by FFmpeg compiled to WebAssembly.</p>
   </footer>
 
-  <script src="app.js"></script>
+  <script type="module" src="app.js"></script>
 </body>
 </html>
